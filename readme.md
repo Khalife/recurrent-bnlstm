@@ -3,7 +3,9 @@ Forked from Tensorflow example (LSTM)
 Requires MNIST dataset
 
 Input : process repo .
-wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz to get the input example. 
+
+wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz
+ 
 tar simple-examples.tgz
 
 Command example
