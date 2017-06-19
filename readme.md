@@ -1,6 +1,9 @@
 Tensorflow Batch Normalized LSTM using tensorflow
+
 Based on https://arxiv.org/abs/1603.09025
+
 Forked from Tensorflow example (LSTM)
+
 Requires MNIST dataset
 
 Input : 
