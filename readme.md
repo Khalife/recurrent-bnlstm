@@ -2,7 +2,7 @@ Tensorflow Batch Normalized LSTM using tensorflow
 Forked from Tensorflow example (LSTM)
 Requires MNIST dataset
 
-Input : process repo .
+Input : 
 
 wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz/ && tar simple-examples.tgz
 
