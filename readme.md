@@ -4,7 +4,7 @@ Requires MNIST dataset
 
 Input : process repo .
 
-wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz\n 
+wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz/ 
 tar simple-examples.tgz
 
 Command example
