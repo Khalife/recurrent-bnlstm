@@ -530,6 +530,12 @@ def get_config():
     raise ValueError("Invalid model: %s", FLAGS.model)
 
 
+
+train_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
+valid_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
+test_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
+
+
 # Train
 with tf.variable_scope("mentions") as scope:
   mentions_embeddings = PTBInput(config=eval_config, data=train_data["mention_embeddings"], name="TestInput")
@@ -574,17 +580,16 @@ with tf.variable_scope("entity") as scope:
   corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
 
 
-
-
-
-normalize_mention = tf.nn.l2_normalize(mention_model,0)        
-normalize_entity = tf.nn.l2_normalize(entity_model,0)
-
-cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_entity[entity_indexes]))
-cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_entity[corrupted_entity_indexes]))
+normalize_mention = tf.nn.l2_normalize(mention_model, 0)        
+normalize_gold_entity = tf.nn.l2_normalize(gold_entity_model, 0)
+normalize_corrupted_entity = tf.nn.normalize(corrupted_entity_model, 0)
+cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_gold_entity))
+cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_corrupted_entity))
 
 distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
 loss = tf.reduce_sum(distance)
+
+
 
 #	
 #
