@@ -588,7 +588,7 @@ cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,norm
 
 distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
 loss = tf.reduce_sum(distance)
-
+optimizer = 
 
 
 #	
