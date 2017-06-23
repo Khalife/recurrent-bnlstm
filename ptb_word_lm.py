@@ -380,7 +380,7 @@ class BNRModel(object):
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
 
-  @property
+  @proerty
   def input(self):
     return self._input
 
@@ -529,6 +529,67 @@ def get_config():
   else:
     raise ValueError("Invalid model: %s", FLAGS.model)
 
+
+# Train
+with tf.variable_scope("mentions") as scope:
+  mentions_embeddings = PTBInput(config=eval_config, data=train_data["mention_embeddings"], name="TestInput")
+  mention_model = BNRModel(is_training=True, config=config, input_=mentions_embeddings) 
+
+
+with tf.variable_scope("entity") as scope:
+  gold_entities_embeddings = PTBInput(config=eval_config, data=train_data["gold_entity_embeddings"], name="TestInput")
+  gold_entity_model = BNRModel(is_training=True, config=config, input_=gold_entities_embeddings)
+  scope.reuse_variables()
+  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entity_embeddings"], name="TestInput")
+  corrupted_entity_model = BNRModel(is_training=True, config=config, input_=corrupted_entities_embeddings)
+
+
+# Valid
+with tf.variable_scope("mentions") as scope:
+  scope.reuse_variables()
+  mentions_embeddings = PTBInput(config=eval_config, data=valid_data["mention_embeddings"], name="TestInput")
+  mention_model = BNRModel(is_training=False, config=config, input_=mentions_embeddings) 
+
+
+with tf.variable_scope("entity") as scope: 
+  scope.reuse_variables()
+  gold_entities_embeddings = PTBInput(config=eval_config, data=valid_data["gold_entity_embeddings"], name="TestInput")
+  gold_entity_model = BNRModel(is_training=False, config=config, input_=gold_entities_embeddings)
+  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entity_embeddings"], name="TestInput")
+  corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
+
+# Test
+with tf.variable_scope("mentions") as scope:
+  scope.reuse_variables()
+  mentions_embeddings = PTBInput(config=eval_config, data=test_data["mention_embeddings"], name="TestInput")
+  mention_model = BNRModel(is_training=False, config=config, input_=mentions_embeddings) 
+
+
+with tf.variable_scope("entity") as scope:
+  scope.reuse_variables()
+  gold_entities_embeddings = PTBInput(config=eval_config, data=test_data["gold_entity_embeddings"], name="TestInput")
+  gold_entity_model = BNRModel(is_training=False, config=config, input_=gold_entities_embeddings)
+  scope.reuse_variables()
+  corrupted_entities_embeddings = PTBInput(config=eval_config, data=test_data["corrupted_entity_embeddings"], name="TestInput")
+  corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
+
+
+
+
+
+normalize_mention = tf.nn.l2_normalize(mention_model,0)        
+normalize_entity = tf.nn.l2_normalize(entity_model,0)
+
+cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_entity[entity_indexes]))
+cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_entity[corrupted_entity_indexes]))
+
+distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
+loss = tf.reduce_sum(distance)
+
+#	
+#
+#distance  = tf.sqrt(tf.reduce_sum(tf.pow(tf.sub(model1,model2),2),1,keep_dims=True))
+#loss = contrastive_loss(labels,distance)
 
 def main(_):
   if not FLAGS.data_path:
