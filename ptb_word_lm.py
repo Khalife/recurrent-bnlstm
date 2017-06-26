@@ -355,12 +355,12 @@ class BNRModel(object):
     softmax_w = tf.get_variable(
         "softmax_w", [size, vocab_size], dtype=data_type())
     softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
-    logits = tf.matmul(output, softmax_w) + softmax_b
-    loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
-        [logits],
-        [tf.reshape(input_.targets, [-1])],
-        [tf.ones([batch_size * num_steps], dtype=data_type())])
-    self._cost = cost = tf.reduce_sum(loss) / batch_size
+    #logits = tf.matmul(output, softmax_w) + softmax_b
+    #loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
+    #    [logits],
+    #    [tf.reshape(input_.targets, [-1])],
+    #    [tf.ones([batch_size * num_steps], dtype=data_type())])
+    #self._cost = cost = tf.reduce_sum(loss) / batch_size
     self._final_state = state
     #self.softmax_w = softmax_w
     #self.softmax_b = softmax_b
@@ -368,21 +368,20 @@ class BNRModel(object):
       return
 
     self._lr = tf.Variable(0.0, trainable=False)
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
-                                      config.max_grad_norm)
-    optimizer = tf.train.GradientDescentOptimizer(self._lr)
-    self._train_op = optimizer.apply_gradients(
-        zip(grads, tvars),
-        global_step=tf.contrib.framework.get_or_create_global_step())
+    #tvars = tf.trainable_variables()
+    #grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
+    #                                  config.max_grad_norm)
+    #optimizer = tf.train.GradientDescentOptimizer(self._lr)
+    #self._train_op = optimizer.apply_gradients(
+    #    zip(grads, tvars),
+    #    global_step=tf.contrib.framework.get_or_create_global_step())
 
-    self._new_lr = tf.placeholder(
-        tf.float32, shape=[], name="new_learning_rate")
+    self._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
     self._lr_update = tf.assign(self._lr, self._new_lr)
     
 
-  #def assign_lr(self, session, lr_value):
-  #  session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
+  def assign_lr(self, session, lr_value):
+    session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
 
   @property
   def input(self):
@@ -494,7 +493,8 @@ def run_epoch(session, model, eval_op=None, verbose=False):
   costs = 0.0
   iters = 0
   state = session.run(model.initial_state)
-  cost = tf.reduce_sum(loss) / model.input.batch_size
+  pdb.set_trace()
+  cost = tf.reduce_sum(model.loss) / model.input.batch_size
   fetches = {
       #"cost": model.cost,
       "cost": cost,
@@ -673,7 +673,6 @@ def main(_):
   softmax_w = [v for v in tf.global_variables() if v.name == "Model/softmax_w:0"][0]
   softmax_b = [v for v in tf.global_variables() if v.name == "Model/softmax_b:0"][0]
   
-  pdb.set_trace()
   logits = tf.matmul(output, softmax_w) + softmax_b
   input_ = mention_model._input
   batch_size = input_.batch_size
@@ -682,14 +681,30 @@ def main(_):
       [logits],
       [tf.reshape(input_.targets, [-1])],
       [tf.ones([input_.batch_size * num_steps], dtype=data_type())])
-  
+  cost = tf.reduce_sum(loss) / batch_size 
+  #self._cost = cost = tf.reduce_sum(loss) / batch_size
+  #self._final_state = state
+  #self.softmax_w = softmax_w
+  #self.softmax_b = softmax_b
+  cost = tf.reduce_sum(loss) / batch_size
+  mention_model._lr = tf.Variable(0.0, trainable=False)
+  tvars = tf.trainable_variables()
+  grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),config.max_grad_norm)
+  optimizer = tf.train.GradientDescentOptimizer(mention_model._lr)
+  mention_model._train_op = optimizer.apply_gradients(zip(grads, tvars),global_step=tf.contrib.framework.get_or_create_global_step())
 
   sv = tf.train.Supervisor(logdir=FLAGS.save_path)
   print("Starting session ...")
   with sv.managed_session() as session:                                                                         
-    pdb.set_trace() 
+    pdb.set_trace()
+    start_time = time.time()
+    i = 0 
+    lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+    mention_model.assign_lr(session, config.learning_rate * lr_decay)
+    costs = 0.0
+    iters = 0
+    verbose = True
     state = session.run(mention_model.initial_state)
-    cost = tf.reduce_sum(loss) / batch_size
     fetches = {
         #"cost": model.cost,
         "cost": cost,
@@ -750,7 +765,7 @@ def main(_):
     with sv.managed_session() as session:
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        #m.assign_lr(session, config.learning_rate * lr_decay)
+        m.assign_lr(session, config.learning_rate * lr_decay)
 
         print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
         train_perplexity = run_epoch(session, m, eval_op=m.train_op,
