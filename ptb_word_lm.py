@@ -349,7 +349,9 @@ class BNRModel(object):
         (cell_output, state) = cell(inputs[:, time_step, :], state)
         outputs.append(cell_output)
 
+
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
+    self.output = output
     softmax_w = tf.get_variable(
         "softmax_w", [size, vocab_size], dtype=data_type())
     softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
@@ -360,7 +362,8 @@ class BNRModel(object):
         [tf.ones([batch_size * num_steps], dtype=data_type())])
     self._cost = cost = tf.reduce_sum(loss) / batch_size
     self._final_state = state
-
+    #self.softmax_w = softmax_w
+    #self.softmax_b = softmax_b
     if not is_training:
       return
 
@@ -376,11 +379,12 @@ class BNRModel(object):
     self._new_lr = tf.placeholder(
         tf.float32, shape=[], name="new_learning_rate")
     self._lr_update = tf.assign(self._lr, self._new_lr)
+    
 
-  def assign_lr(self, session, lr_value):
-    session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
+  #def assign_lr(self, session, lr_value):
+  #  session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
 
-  @proerty
+  @property
   def input(self):
     return self._input
 
@@ -404,6 +408,8 @@ class BNRModel(object):
   def train_op(self):
     return self._train_op
 
+
+
 class PTBInput(object):
   """The input data."""
 
@@ -413,7 +419,6 @@ class PTBInput(object):
     self.epoch_size = ((len(data) // batch_size) - 1) // num_steps
     self.input_data, self.targets = reader.ptb_producer(
         data, batch_size, num_steps, name=name)
-
 
 
 
@@ -483,14 +488,16 @@ class TestConfig(object):
 
 
 def run_epoch(session, model, eval_op=None, verbose=False):
+#def run_epoch(session, model, loss, eval_op=None, verbose=False):
   """Runs the model on the given data."""
   start_time = time.time()
   costs = 0.0
   iters = 0
   state = session.run(model.initial_state)
-
+  cost = tf.reduce_sum(loss) / model.input.batch_size
   fetches = {
-      "cost": model.cost,
+      #"cost": model.cost,
+      "cost": cost,
       "final_state": model.final_state,
   }
   if eval_op is not None:
@@ -531,64 +538,95 @@ def get_config():
 
 
 
-train_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
-valid_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
-test_data = {"mentions_embeddings","gold_entities_embeddings", "corrupted_entities_embeddings"}
+train_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
+valid_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
+test_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
+
+config = get_config()
+eval_config = get_config()
 
 
 # Train
-with tf.variable_scope("mentions") as scope:
-  mentions_embeddings = PTBInput(config=eval_config, data=train_data["mention_embeddings"], name="TestInput")
-  mention_model = BNRModel(is_training=True, config=config, input_=mentions_embeddings) 
+#with tf.variable_scope("mentions") as scope:
+#  mentions_embeddings = PTBInput(config=config, data=train_data["mentions_embeddings"], name="TestInput")
+#  mention_model = BNRModel(is_training=True, config=config, input_=mentions_embeddings) 
+#
+#
+#with tf.variable_scope("entity") as scope:
+#  gold_entities_embeddings = PTBInput(config=eval_config, data=train_data["gold_entities_embeddings"], name="TestInput")
+#  gold_entity_model = BNRModel(is_training=True, config=config, input_=gold_entities_embeddings)
+#  scope.reuse_variables()
+#  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entities_embeddings"], name="TestInput")
+#  corrupted_entity_model = BNRModel(is_training=True, config=config, input_=corrupted_entities_embeddings)
+#
+#
+## Valid
+#with tf.variable_scope("mentions") as scope:
+#  scope.reuse_variables()
+#  mentions_embeddings = PTBInput(config=config, data=valid_data["mentions_embeddings"], name="TestInput")
+#  mention_model = BNRModel(is_training=False, config=config, input_=mentions_embeddings) 
+#
+#
+#with tf.variable_scope("entity") as scope: 
+#  scope.reuse_variables()
+#  gold_entities_embeddings = PTBInput(config=config, data=valid_data["gold_entities_embeddings"], name="TestInput")
+#  gold_entity_model = BNRModel(is_training=False, config=config, input_=gold_entities_embeddings)
+#  corrupted_entities_embeddings = PTBInput(config=config, data=train_data["corrupted_entities_embeddings"], name="TestInput")
+#  corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
+#
+## Test
+#with tf.variable_scope("mentions") as scope:
+#  scope.reuse_variables()
+#  mentions_embeddings = PTBInput(config=eval_config, data=test_data["mentions_embeddings"], name="TestInput")
+#  mention_model = BNRModel(is_training=False, config=eval_config, input_=mentions_embeddings) 
+#
+#
+#with tf.variable_scope("entity") as scope:
+#  scope.reuse_variables()
+#  gold_entities_embeddings = PTBInput(config=eval_config, data=test_data["gold_entities_embeddings"], name="TestInput")
+#  gold_entity_model = BNRModel(is_training=False, config=eval_config, input_=gold_entities_embeddings)
+#  scope.reuse_variables()
+#  corrupted_entities_embeddings = PTBInput(config=eval_config, data=test_data["corrupted_entities_embeddings"], name="TestInput")
+#  corrupted_entity_model = BNRModel(is_training=False, config=eval_config, input_=corrupted_entities_embeddings)
+#
+#
+#normalize_mention = tf.nn.l2_normalize(mention_model, 0)        
+#normalize_gold_entity = tf.nn.l2_normalize(gold_entity_model, 0)
+#normalize_corrupted_entity = tf.nn.normalize(corrupted_entity_model, 0)
+#cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_gold_entity))
+#cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_corrupted_entity))
+#
+#distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
+#loss = tf.reduce_sum(distance)/(batch_size)
+#optimizer = tf.train.AdamOptimizer(learning_rate = 0.0001).minimize(loss)
+
+#batch_size = 128
+#with tf.Session() as session:
+#for epoch in range(30):
+#  avg_loss = 0.
+#  avg_acc = 0.
+#  total_batch = int(X_train.shape[0]/batch_size)
+#  start_time = time.time()
+#  # Loop over all batches
+#  for i in range(total_batch):
+#      s  = i * batch_size
+#      e = (i+1) *batch_size
+#      # Fit training using batch data
+#      input1,input2,y =next_batch(s,e,tr_pairs,tr_y)
+#      _,loss_value,predict=sess.run([optimizer,loss,distance], feed_dict={images_L:input1,images_R:input2 ,labels:y,dropout_f:0.9})
+#      #feature1=model1.eval(feed_dict={images_L:input1,dropout_f:0.9})
+#      #feature2=model2.eval(feed_dict={images_R:input2,dropout_f:0.9})
+#      tr_acc = compute_accuracy(predict,y)
+#      #print(model1.)
+#      #print(model2.
+#      pdb.set_trace()
+#      if math.isnan(tr_acc) and epoch != 0:
+#          print('tr_acc %0.2f' % tr_acc)
+#          pit db.set_trace()
+#      avg_loss += loss_value
+#      avg_acc +=tr_acc*100
 
 
-with tf.variable_scope("entity") as scope:
-  gold_entities_embeddings = PTBInput(config=eval_config, data=train_data["gold_entity_embeddings"], name="TestInput")
-  gold_entity_model = BNRModel(is_training=True, config=config, input_=gold_entities_embeddings)
-  scope.reuse_variables()
-  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entity_embeddings"], name="TestInput")
-  corrupted_entity_model = BNRModel(is_training=True, config=config, input_=corrupted_entities_embeddings)
-
-
-# Valid
-with tf.variable_scope("mentions") as scope:
-  scope.reuse_variables()
-  mentions_embeddings = PTBInput(config=eval_config, data=valid_data["mention_embeddings"], name="TestInput")
-  mention_model = BNRModel(is_training=False, config=config, input_=mentions_embeddings) 
-
-
-with tf.variable_scope("entity") as scope: 
-  scope.reuse_variables()
-  gold_entities_embeddings = PTBInput(config=eval_config, data=valid_data["gold_entity_embeddings"], name="TestInput")
-  gold_entity_model = BNRModel(is_training=False, config=config, input_=gold_entities_embeddings)
-  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entity_embeddings"], name="TestInput")
-  corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
-
-# Test
-with tf.variable_scope("mentions") as scope:
-  scope.reuse_variables()
-  mentions_embeddings = PTBInput(config=eval_config, data=test_data["mention_embeddings"], name="TestInput")
-  mention_model = BNRModel(is_training=False, config=config, input_=mentions_embeddings) 
-
-
-with tf.variable_scope("entity") as scope:
-  scope.reuse_variables()
-  gold_entities_embeddings = PTBInput(config=eval_config, data=test_data["gold_entity_embeddings"], name="TestInput")
-  gold_entity_model = BNRModel(is_training=False, config=config, input_=gold_entities_embeddings)
-  scope.reuse_variables()
-  corrupted_entities_embeddings = PTBInput(config=eval_config, data=test_data["corrupted_entity_embeddings"], name="TestInput")
-  corrupted_entity_model = BNRModel(is_training=False, config=config, input_=corrupted_entities_embeddings)
-
-
-normalize_mention = tf.nn.l2_normalize(mention_model, 0)        
-normalize_gold_entity = tf.nn.l2_normalize(gold_entity_model, 0)
-normalize_corrupted_entity = tf.nn.normalize(corrupted_entity_model, 0)
-cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_gold_entity))
-cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_corrupted_entity))
-
-distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
-loss = tf.reduce_sum(distance)
-optimizer = 
 
 
 #	
@@ -606,6 +644,83 @@ def main(_):
   eval_config = get_config()
   eval_config.batch_size = 1
   eval_config.num_steps = 1
+  
+  size = config.hidden_size
+  vocab_size = config.vocab_size
+  
+  ############################ 
+  print("loading data")
+  train_input = PTBInput(config=config, data=train_data, name="TrainInput")
+  
+
+
+
+  initializer = tf.random_uniform_initializer(-config.init_scale,config.init_scale)
+
+
+
+  with tf.variable_scope("Model", reuse=None, initializer=initializer):      
+    mention_model = BNRModel(is_training=True, config=config, input_=train_input)
+
+
+
+
+  # state = mention_model._initial_state
+  output = mention_model.output
+  print("model built")
+  #output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
+  #softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+  softmax_w = [v for v in tf.global_variables() if v.name == "Model/softmax_w:0"][0]
+  softmax_b = [v for v in tf.global_variables() if v.name == "Model/softmax_b:0"][0]
+  
+  pdb.set_trace()
+  logits = tf.matmul(output, softmax_w) + softmax_b
+  input_ = mention_model._input
+  batch_size = input_.batch_size
+  num_steps = input_.batch_size
+  loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
+      [logits],
+      [tf.reshape(input_.targets, [-1])],
+      [tf.ones([input_.batch_size * num_steps], dtype=data_type())])
+  
+
+  sv = tf.train.Supervisor(logdir=FLAGS.save_path)
+  print("Starting session ...")
+  with sv.managed_session() as session:                                                                         
+    pdb.set_trace() 
+    state = session.run(mention_model.initial_state)
+    cost = tf.reduce_sum(loss) / batch_size
+    fetches = {
+        #"cost": model.cost,
+        "cost": cost,
+        "final_state": mention_model.final_state,
+    }
+    #if eval_op is not None:
+    #  fetches["eval_op"] = eval_op
+    print("beginning steps ...")
+    for step in range(mention_model.input.epoch_size):
+      feed_dict = {}
+      for i, (c, h) in enumerate(mention_model.initial_state):
+        feed_dict[c] = state[i].c
+        feed_dict[h] = state[i].h
+                                                                             
+      vals = session.run(fetches, feed_dict)
+      cost = vals["cost"]
+      state = vals["final_state"]
+                                                                             
+      costs += cost
+      iters += mention_model.input.num_steps
+                                                                             
+      if verbose and step % (mention_model.input.epoch_size // 10) == 10:
+        print("%.3f perplexity: %.3f speed: %.0f wps" %
+              (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
+               iters * mention_model.input.batch_size / (time.time() - start_time)))
+      print("End of step")                                                                       
+  print(np.exp(costs / iters))
+  pdb.set_trace()
+
+####################################### Initial code working ###########################################
+########################################################################################################
 
   with tf.Graph().as_default():
     initializer = tf.random_uniform_initializer(-config.init_scale,
@@ -622,35 +737,41 @@ def main(_):
     with tf.name_scope("Valid"):
       valid_input = PTBInput(config=config, data=valid_data, name="ValidInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
-        #mvalid = PTBModel(is_training=False, config=config, input_=valid_input)
-        mvalid = BNRModel(is_training=False, config=config, input_=valid_input)
+        mvalid = PTBModel(is_training=False, config=config, input_=valid_input)
+        #mvalid = BNRModel(is_training=False, config=config, input_=valid_input)
       tf.summary.scalar("Validation Loss", mvalid.cost)
 
     with tf.name_scope("Test"):
       test_input = PTBInput(config=eval_config, data=test_data, name="TestInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
-        #mtest = PTBModel(is_training=False, config=eval_config, input_=test_input)
-        mtest = BNRModel(is_training=False, config=eval_config, input_=test_input)
+        mtest = PTBModel(is_training=False, config=eval_config, input_=test_input)
+        #mtest = BNRModel(is_training=False, config=eval_config, input_=test_input)
     sv = tf.train.Supervisor(logdir=FLAGS.save_path)
     with sv.managed_session() as session:
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        m.assign_lr(session, config.learning_rate * lr_decay)
+        #m.assign_lr(session, config.learning_rate * lr_decay)
 
         print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
         train_perplexity = run_epoch(session, m, eval_op=m.train_op,
                                      verbose=True)
+        
+        #train_perplexity = run_epoch(session, m, loss, eval_op=m.train_op, verbose=True)
         print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
         valid_perplexity = run_epoch(session, mvalid)
+        #valid_perplexity = run_epoch(session, mvalid, loss)
         print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
-      test_perplexity = run_epoch(session, mtest)
+      #test_perplexity = run_epoch(session, mtest)
+      test_perplexity = run_epoch(session, mtest, loss)
       print("Test Perplexity: %.3f" % test_perplexity)
 
       if FLAGS.save_path:
         print("Saving model to %s." % FLAGS.save_path)
         sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step)
 
+##############################################################################################
+##############################################################################################
 
 if __name__ == "__main__":
   tf.app.run()
