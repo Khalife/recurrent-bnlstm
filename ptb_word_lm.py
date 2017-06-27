@@ -88,7 +88,8 @@ def orthogonal_initializer(scale=1.0):
             ValueError(
                 "Do not know what to do with partition_info in BN_LSTMCell")
         flat_shape = (shape[0], np.prod(shape[1:]))
-        a = np.random.normal(0.0, 1.0, flat_shape)
+        #a = np.random.normal(0.0, 1.0, flat_shape)
+        a = np.zeros(flat_shape)
         u, _, v = np.linalg.svd(a, full_matrices=False)
         q = u if u.shape == flat_shape else v
         q = q.reshape(shape)
@@ -349,25 +350,25 @@ class BNRModel(object):
         (cell_output, state) = cell(inputs[:, time_step, :], state)
         outputs.append(cell_output)
 
-
+    self.state = state
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
     self.output = output
-    softmax_w = tf.get_variable(
-        "softmax_w", [size, vocab_size], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+    #softmax_w = tf.get_variable(
+    #    "softmax_w", [size, vocab_size], dtype=data_type())
+    #softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
     #logits = tf.matmul(output, softmax_w) + softmax_b
     #loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
     #    [logits],
     #    [tf.reshape(input_.targets, [-1])],
     #    [tf.ones([batch_size * num_steps], dtype=data_type())])
     #self._cost = cost = tf.reduce_sum(loss) / batch_size
-    self._final_state = state
+    #self._final_state = state
     #self.softmax_w = softmax_w
     #self.softmax_b = softmax_b
     if not is_training:
       return
 
-    self._lr = tf.Variable(0.0, trainable=False)
+    #self._lr = tf.Variable(0.0, trainable=False)
     #tvars = tf.trainable_variables()
     #grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
     #                                  config.max_grad_norm)
@@ -376,9 +377,9 @@ class BNRModel(object):
     #    zip(grads, tvars),
     #    global_step=tf.contrib.framework.get_or_create_global_step())
 
-    self._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
-    self._lr_update = tf.assign(self._lr, self._new_lr)
-    
+    #self._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
+    #self._lr_update = tf.assign(self._lr, self._new_lr)   
+ 
 
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
@@ -492,7 +493,7 @@ def run_epoch(session, model, eval_op=None, verbose=False):
   start_time = time.time()
   costs = 0.0
   iters = 0
-  state = session.run(model.initial_state)
+  state = session.run(model.initial_state) # gets the initial state of a BNLSTM cell
   pdb.set_trace()
   cost = tf.reduce_sum(model.loss) / model.input.batch_size
   fetches = {
@@ -655,48 +656,55 @@ def main(_):
 
 
 
-  initializer = tf.random_uniform_initializer(-config.init_scale,config.init_scale)
-
+  #initializer = tf.random_uniform_initializer(-config.init_scale,config.init_scale)
+  initializer = tf.random_uniform_initializer(0.5,0.5)
 
 
   with tf.variable_scope("Model", reuse=None, initializer=initializer):      
     mention_model = BNRModel(is_training=True, config=config, input_=train_input)
+    # state = mention_model._initial_state
+    batch_size = config.batch_size 
+    num_steps = config.num_steps
+    output = mention_model.output
+    state = mention_model.state
+    softmax_w = tf.get_variable(
+        "softmax_w", [size, vocab_size], dtype=data_type())
+    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+    logits = tf.matmul(output, softmax_w) + softmax_b
+    loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
+        [logits],
+        [tf.reshape(mention_model._input.targets, [-1])],
+        [tf.ones([batch_size * num_steps], dtype=data_type())])
+    mention_model._cost = cost = tf.reduce_sum(loss) / batch_size
+    mention_model._final_state = state
+    mention_model.softmax_w = softmax_w
+    mention_model.softmax_b = softmax_b
+    
+    mention_model._lr = tf.Variable(0.0, trainable=False)
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
+                                      config.max_grad_norm)
+    optimizer = tf.train.GradientDescentOptimizer(mention_model._lr)
+    mention_model._train_op = optimizer.apply_gradients(
+        zip(grads, tvars),
+        global_step=tf.contrib.framework.get_or_create_global_step())
+                                                                                  
+    mention_model._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
+    mention_model._lr_update = tf.assign(mention_model._lr, mention_model._new_lr)   
+
+    print("For output")
 
 
 
 
-  # state = mention_model._initial_state
-  output = mention_model.output
-  print("model built")
-  #output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
-  #softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
-  softmax_w = [v for v in tf.global_variables() if v.name == "Model/softmax_w:0"][0]
-  softmax_b = [v for v in tf.global_variables() if v.name == "Model/softmax_b:0"][0]
-  
-  logits = tf.matmul(output, softmax_w) + softmax_b
-  input_ = mention_model._input
-  batch_size = input_.batch_size
-  num_steps = input_.batch_size
-  loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
-      [logits],
-      [tf.reshape(input_.targets, [-1])],
-      [tf.ones([input_.batch_size * num_steps], dtype=data_type())])
-  cost = tf.reduce_sum(loss) / batch_size 
-  #self._cost = cost = tf.reduce_sum(loss) / batch_size
-  #self._final_state = state
-  #self.softmax_w = softmax_w
-  #self.softmax_b = softmax_b
-  cost = tf.reduce_sum(loss) / batch_size
-  mention_model._lr = tf.Variable(0.0, trainable=False)
-  tvars = tf.trainable_variables()
-  grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),config.max_grad_norm)
-  optimizer = tf.train.GradientDescentOptimizer(mention_model._lr)
-  mention_model._train_op = optimizer.apply_gradients(zip(grads, tvars),global_step=tf.contrib.framework.get_or_create_global_step())
 
+
+  ########### Run epoch    ##############
+  #######################################
+  #with tf.Graph().as_default():
   sv = tf.train.Supervisor(logdir=FLAGS.save_path)
   print("Starting session ...")
   with sv.managed_session() as session:                                                                         
-    pdb.set_trace()
     start_time = time.time()
     i = 0 
     lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
@@ -710,27 +718,28 @@ def main(_):
         "cost": cost,
         "final_state": mention_model.final_state,
     }
-    #if eval_op is not None:
-    #  fetches["eval_op"] = eval_op
+    eval_op = mention_model._train_op
+    fetches["eval_op"] = eval_op
+    
     print("beginning steps ...")
     for step in range(mention_model.input.epoch_size):
       feed_dict = {}
       for i, (c, h) in enumerate(mention_model.initial_state):
         feed_dict[c] = state[i].c
         feed_dict[h] = state[i].h
-                                                                             
+      
+      print(state[0][0][0][:4])                                                                       
       vals = session.run(fetches, feed_dict)
       cost = vals["cost"]
       state = vals["final_state"]
                                                                              
       costs += cost
       iters += mention_model.input.num_steps
-                                                                             
+      print("For parameters")
       if verbose and step % (mention_model.input.epoch_size // 10) == 10:
         print("%.3f perplexity: %.3f speed: %.0f wps" %
               (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
                iters * mention_model.input.batch_size / (time.time() - start_time)))
-      print("End of step")                                                                       
   print(np.exp(costs / iters))
   pdb.set_trace()
 
