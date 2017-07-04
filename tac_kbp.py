@@ -213,6 +213,7 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 	for m in range(M):
 		entity_words = []	
 		mention_words = []
+		corrupted_words_embeddings = []
 		#corruptedEntities = []
 		#goldEntities = []
 		#
@@ -259,14 +260,14 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 						try:
 							word_e = corruptedEntityWords[ce]
 							word_entity = embeddings[word_e]
-							corrupted_words.append(word_entity) # Word embedding, at last!
+							corrupted_words_embeddings.append(word_entity) # Word embedding, at last!
 						except:
 							pass
 
 					if ( len(corrupted_words) > 0 ):
 						not_found_corrupted_entity = True
 				
-				corruptedEmbeddings.append(np.mean(corruptedEntityEmbedding,0))
+				corruptedEmbeddings.append(np.mean(corrupted_words_embeddings,0))
 
 
 		W = len(mentionsDataFrame["words"][m])
@@ -274,7 +275,7 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 			#print("number of words : " + str(w))
 			try:
 				word_w = mentionsDataFrame["words"][m][w]	
-				word = embeddings[word_w].as_matrix()	
+				word = embeddings[word_w]	
 				mention_words.append(word) # Word embedding, at last!	
 			except:
 				pass
