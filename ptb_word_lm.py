@@ -51,11 +51,12 @@ from __future__ import print_function
 import inspect
 import time
 import pdb
-
+import tac_kbp
 import numpy as np
 import tensorflow as tf
-
+import tac_kbp
 import reader
+import pandas
 
 flags = tf.flags
 logging = tf.logging
@@ -325,62 +326,37 @@ class BNRModel(object):
 
     self._initial_state = cell.zero_state(batch_size, data_type())
 
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable(
-          "embedding", [vocab_size, size], dtype=data_type())
-      inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
+    #with tf.device("/cpu:0"):
+    #  embedding = tf.get_variable(
+    #      "embedding", [vocab_size, size], dtype=data_type())
+    #  inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
+
+    # previous inputs : 
+	# input_ is a PTBInput, and input_.input_data is a <tf.Tensor 'TrainInput/StridedSlice:0' shape=(20, 20) dtype=int32>
+	# inputs is a <tf.Tensor 'embedding_lookup:0' shape=(20, 20, 200) dtype=float32>
+    inputs = input_.input_data
+    pdb.set_trace()
+    
 
     if is_training and config.keep_prob < 1:
       inputs = tf.nn.dropout(inputs, config.keep_prob)
 
-    # Simplified version of models/tutorials/rnn/rnn.py's rnn().
-    # This builds an unrolled LSTM for tutorial purposes only.
-    # In general, use the rnn() or state_saving_rnn() from rnn.py.
-    #
-    # The alternative version of the code below is:
-    #
-    # inputs = tf.unstack(inputs, num=num_steps, axis=1)
-    # outputs, state = tf.contrib.rnn.static_rnn(
-    #     cell, inputs, initial_state=self._initial_state)
     outputs = []
     state = self._initial_state
     with tf.variable_scope("RNN"):
       for time_step in range(num_steps):
         if time_step > 0: tf.get_variable_scope().reuse_variables()
-        (cell_output, state) = cell(inputs[:, time_step, :], state)
+        #(cell_output, state) = cell(inputs[:, time_step, :], state)
+        (cell_output, state) = cell(inputs[:, time_step], state)
         outputs.append(cell_output)
 
     self.state = state
     output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, size])
     self.output = output
-    #softmax_w = tf.get_variable(
-    #    "softmax_w", [size, vocab_size], dtype=data_type())
-    #softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
-    #logits = tf.matmul(output, softmax_w) + softmax_b
-    #loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
-    #    [logits],
-    #    [tf.reshape(input_.targets, [-1])],
-    #    [tf.ones([batch_size * num_steps], dtype=data_type())])
-    #self._cost = cost = tf.reduce_sum(loss) / batch_size
-    #self._final_state = state
-    #self.softmax_w = softmax_w
-    #self.softmax_b = softmax_b
+    
     if not is_training:
       return
-
-    #self._lr = tf.Variable(0.0, trainable=False)
-    #tvars = tf.trainable_variables()
-    #grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
-    #                                  config.max_grad_norm)
-    #optimizer = tf.train.GradientDescentOptimizer(self._lr)
-    #self._train_op = optimizer.apply_gradients(
-    #    zip(grads, tvars),
-    #    global_step=tf.contrib.framework.get_or_create_global_step())
-
-    #self._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
-    #self._lr_update = tf.assign(self._lr, self._new_lr)   
- 
-
+  
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
 
@@ -537,28 +513,119 @@ def get_config():
   else:
     raise ValueError("Invalid model: %s", FLAGS.model)
 
+def nel_producer(raw_data, config, name=None):
+  """Iterate on the raw PTB data.
+  This chunks up raw_data into batches of examples and returns Tensors that are drawn from these batches.
+  Args:
+  raw_data: one of the raw data outputs from ptb_raw_data.
+  batch_size: int, the batch size.
+  num_steps: int, the number of unrolls.
+  name: the name of this operation (optional).
+  Returns:
+  A pair of Tensors, each shaped [batch_size, num_steps]. The second element
+  of the tuple is the same data time-shifted to the right by one.
+  Raises:
+  tf.errors.InvalidArgumentError: if batch_size or num_steps are too high.
+  """
+  with tf.name_scope(name, "NELProducer", [raw_data, batch_size, num_steps]):
+    #raw_data = tf.convert_to_tensor(raw_data, name="raw_data", dtype=tf.int32)
+    pdb.set_trace()
+    batch_size = config.batch_size
+    num_steps = config.num_steps
+    dimension = config.dimension
+	raw_data = tf.convert_to_tensor(raw_data, name="raw_data")
+    data_len = tf.size(raw_data)
+    batch_len = data_len // batch_size
+    pdb.set_trace()
+    data = tf.reshape(raw_data[0 : batch_size * batch_len], [batch_size, batch_len])
+    epoch_size = (batch_len - 1) // num_steps
+    assertion = tf.assert_positive(epoch_size, message="epoch_size == 0, decrease batch_size or num_steps")
+    pdb.set_trace()	
+    with tf.control_dependencies([assertion]):
+      epoch_size = tf.identity(epoch_size, name="epoch_size")
+    pdb.set_trace()
+    i = tf.train.range_input_producer(epoch_size, shuffle=False).dequeue()
+    x = tf.strided_slice(data, [0, i * num_steps], [batch_size, (i + 1) * num_steps])
+    x.set_shape([batch_size, num_steps, dimension])
+    return x 
+
+class nelConfig(object):
+  """Small config."""
+  init_scale = 0.1
+  learning_rate = 1.0
+  max_grad_norm = 5
+  num_layers = 2
+  num_steps = 20
+  hidden_size = 200
+  max_epoch = 4
+  max_max_epoch = 13
+  keep_prob = 1.0
+  lr_decay = 0.5
+  batch_size = 50 
+  vocab_size = 10000
 
 
-train_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
-valid_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
-test_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
 
-config = get_config()
-eval_config = get_config()
+
+print("Getting data")
+#_, knowledgeDataFrame = tac_kbp.loadKnowledgeBase()
+#queriesName, mentionsDataFrame = tac_kbp.loadMentions()
+#embeddings = tac_kbp.loadEmbeddings()
+#entityToEmbeddings, knowledgeDataFrame, mentionsDataFrame = tac_kbp.crossMapNel(knowledgeDataFrame, mentionsDataFrame, embeddings)
+#mentionsDataFrame = tac_kbp.generateGoldAndCorruptedEntities(mentionsDataFrame, entityToEmbeddings)
+jsonFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/LDC2015E19_TAC_KBP_English_Entity_Linking_Comprehensive_Training_and_Evaluation_Data_2009-2013/json/"
+mentionsDataFrame = pandas.read_pickle(jsonFolder + "mentionsMappings.pickle")
+def typeCheck(x):
+	return (type(x) is not int)
+
+mentionsDataFrame["embs_check"] = mentionsDataFrame["embeddings"].apply(typeCheck)
+mentionsDataFrame["gold_check"] = mentionsDataFrame["gold_embeddings"].apply(typeCheck)
+mentionsDataFrame["corrupted_check"] = mentionsDataFrame["corrupted_embeddings"].apply(typeCheck)
+mentionsDataFrame = mentionsDataFrame[mentionsDataFrame["embs_check"] & mentionsDataFrame["gold_check"] & mentionsDataFrame["corrupted_check"]]
+train_data = {}
+#train_data["mentions_embeddings"] = np.hstack(mentionsDataFrame["embeddings"].values).tolist()
+#train_data["gold_entities_embeddings"] = np.hstack(mentionsDataFrame["gold_embeddings"].values).tolist()
+#train_data["corrupted_embeddings"] = np.hstack(mentionsDataFrame["corrupted_embeddings"].values).tolist()
+train_data["mentions_embeddings"] = mentionsDataFrame["embeddings"].values.tolist()
+train_data["gold_entities_embeddings"] = mentionsDataFrame["gold_embeddings"].values.tolist()
+train_data["corrupted_embeddings"] = mentionsDataFrame["corrupted_embeddings"].tolist()
+#valid_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
+#test_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
+raw_data = train_data["mentions_embeddings"]
+nel_config = nelConfig()
+test_nel = nel_producer(train_data["mentions_embeddings"], nel_config)
+pdb.set_trace()
+
+
+
+class NELInput(object):
+  """The input data."""
+
+  def __init__(self, config, data, name=None):
+    self.batch_size = batch_size = config.batch_size
+    self.num_steps = num_steps = config.num_steps
+    self.epoch_size = ((len(data) // batch_size) - 1) // num_steps
+    self.input_data, self.targets = reader.ptb_producer(data, batch_size, num_steps, name=name)
+
+
+
+
+
+	
 
 
 # Train
-#with tf.variable_scope("mentions") as scope:
-#  mentions_embeddings = PTBInput(config=config, data=train_data["mentions_embeddings"], name="TestInput")
-#  mention_model = BNRModel(is_training=True, config=config, input_=mentions_embeddings) 
-#
-#
-#with tf.variable_scope("entity") as scope:
-#  gold_entities_embeddings = PTBInput(config=eval_config, data=train_data["gold_entities_embeddings"], name="TestInput")
-#  gold_entity_model = BNRModel(is_training=True, config=config, input_=gold_entities_embeddings)
-#  scope.reuse_variables()
-#  corrupted_entities_embeddings = PTBInput(config=eval_config, data=train_data["corrupted_entities_embeddings"], name="TestInput")
-#  corrupted_entity_model = BNRModel(is_training=True, config=config, input_=corrupted_entities_embeddings)
+with tf.variable_scope("mentions") as scope:
+  mentions_embeddings = PTBInput(config=config, data=train_data["mentions_embeddings"], name="TestInput")
+  mention_model = BNRModel(is_training=True, config=config, input_=mentions_embeddings) 
+
+
+with tf.variable_scope("entity") as scope:
+  gold_entities_embeddings = PTBInput(config=config, data=train_data["gold_entities_embeddings"], name="TestInput")
+  gold_entity_model = BNRModel(is_training=True, config=config, input_=gold_entities_embeddings)
+  scope.reuse_variables()
+  corrupted_entities_embeddings = PTBInput(config=config, data=train_data["corrupted_entities_embeddings"], name="TestInput")
+  corrupted_entity_model = BNRModel(is_training=True, config=config, input_=corrupted_entities_embeddings)
 #
 #
 ## Valid
@@ -635,6 +702,28 @@ eval_config = get_config()
 #distance  = tf.sqrt(tf.reduce_sum(tf.pow(tf.sub(model1,model2),2),1,keep_dims=True))
 #loss = contrastive_loss(labels,distance)
 
+
+
+####################################################################################################
+######################################  Entity linking    ##########################################
+normalize_mention = tf.nn.l2_normalize(mention_model, 0)        
+normalize_gold_entity = tf.nn.l2_normalize(gold_entity_model, 0)
+normalize_corrupted_entity = tf.nn.normalize(corrupted_entity_model, 0)
+cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_gold_entity))
+cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_corrupted_entity))
+
+distance = tf.max(0, 1 - cosine_similarity + cosine_corrupted_similarities)
+loss = tf.reduce_sum(distance)/(batch_size)
+optimizer = tf.train.AdamOptimizer(learning_rate = 0.0001).minimize(loss)
+
+####################################################################################################
+####################################################################################################
+
+
+pdb.set_trace()
+
+
+
 def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to PTB data directory")
@@ -679,7 +768,9 @@ def main(_):
     mention_model._final_state = state
     mention_model.softmax_w = softmax_w
     mention_model.softmax_b = softmax_b
-    
+   
+    ###################################################################################
+    ######################## Learning : painful version  ##############################
     mention_model._lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
@@ -691,7 +782,9 @@ def main(_):
                                                                                   
     mention_model._new_lr = tf.placeholder(tf.float32, shape=[], name="new_learning_rate")
     mention_model._lr_update = tf.assign(mention_model._lr, mention_model._new_lr)   
-
+    ####################################################################################
+    ####################################################################################
+    optimizer1 = tf.train.AdamOptimizer(learning_rate = 0.0001).minimize(cost)
     print("For output")
 
 
@@ -708,7 +801,7 @@ def main(_):
     start_time = time.time()
     i = 0 
     lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-    mention_model.assign_lr(session, config.learning_rate * lr_decay)
+    # mention_model.assign_lr(session, config.learning_rate * lr_decay)
     costs = 0.0
     iters = 0
     verbose = True
@@ -730,6 +823,10 @@ def main(_):
       
       print(state[0][0][0][:4])                                                                       
       vals = session.run(fetches, feed_dict)
+      ############################################        
+      pdb.set_trace()
+      #session.run(optimizer1,feed_dict)
+      ############################################
       cost = vals["cost"]
       state = vals["final_state"]
                                                                              
@@ -798,4 +895,5 @@ def main(_):
 ##############################################################################################
 
 if __name__ == "__main__":
+  mentionsDataFrame, knowledgeDataFrame = parse_tac_kbp()
   tf.app.run()
