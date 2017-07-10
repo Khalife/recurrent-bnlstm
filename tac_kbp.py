@@ -9,6 +9,7 @@ import time
 import numpy as np
 import sys
 import random
+import pickle
 #Example 
 #doc = etree.parse('content-sample.xml')
 defaultDataFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/"
@@ -148,7 +149,11 @@ def loadKnowledgeBase():
 				entityName = kbes[1].get("name")
 				knowledgeBase["id"].append(entityId)
 				knowledgeBase["name"].append(entityName)
-				knowledgeBase["text"].append(kbes[1].find("wiki_text").text.lower().replace("\n", " "))
+				#knowledgeBase["text"].append(kbes[1].find("wiki_text").text.lower().replace("\n", " "))
+				textContent = kbes[1].find("wiki_text").text.lower()
+				textContent = textContent.split("\n")
+				textContent = " ".join(textContent[:2])
+				knowledgeBase["text"].append(textContent)
 				entityToName[entityId] = entityName 
 	
 	with open(defaultDataFolder + challenge2015  + "/json/knowledgeBase.json", "w") as knowledgeBaseJson:
@@ -209,7 +214,9 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 	corruptedEmbeddings = []
 	mentionsToEntity = mentionsDataFrame["entity"].values.tolist()
 	entityIds = list(set([x for x in mentionsToEntity if "NIL" not in x]))
-	
+	nbWordsM = []
+	nbWordsE = []
+	nbWordsC = []	
 	for m in range(M):
 		entity_words = []	
 		mention_words = []
@@ -224,6 +231,8 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 		if ( "NIL" in entityId ):
 			goldEmbeddings.append(-1)
 			corruptedEmbeddings.append(-1)
+			nbWordsC.append(0)
+			nbWordsE.append(0)
 
 		else:	
 			goldKnowledge = knowledgeDataFrame[knowledgeDataFrame["id"] == entityId]
@@ -247,10 +256,12 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 				goldEmbeddings.append(-1)
 				corruptedEmbeddings.append(-1)
 			else:
+				nbWordsE.append(len(entity_words))
 				averageEmbeddings = np.mean(entity_words, 0)
 				goldEmbeddings.append(averageEmbeddings)
 				not_found_corrupted_entity = True
-				while ( not_found_corrupted_entity ): 
+				count = 0
+				while ( ( count < 100 ) and not_found_corrupted_entity ): 
 					corrupted_entities = [ei for ei in entityIds if ei != entityId]
 					corruptedEntityInt = random.randint(0,len(corrupted_entities)-1)
 					corruptedKnowledge = knowledgeDataFrame[knowledgeDataFrame["id"] == corrupted_entities[corruptedEntityInt]]
@@ -266,7 +277,12 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 
 					if ( len(corrupted_words) > 0 ):
 						not_found_corrupted_entity = True
-				
+					count += 1
+	
+				if not_found_corrupted_entity == True:
+					nbWordsC.append(0)
+				else:
+					nbWordsC.append(len(corrupted_words_embeddings))
 				corruptedEmbeddings.append(np.mean(corrupted_words_embeddings,0))
 
 
@@ -330,6 +346,7 @@ def crossMapKB(knowledgeDataFrame, embeddings):
 if __name__ == "__main__":
 	print("Parsing tac-kbp")
 	#entityName, knowledgeDataFrame = loadKnowledgeBase()
+	pdb.set_trace()
 	#queriesName, mentionsDataFrame = loadMentions()
 	#embeddings = loadEmbeddings()
 	############## Complete mentions with embeddings ###########
@@ -410,7 +427,8 @@ if __name__ == "__main__":
 
 	#with open(jsonFolder + "queriesNames.json") as queriesJson:
 	#	queries = json.load(queriesJson)
-
+	with open(jsonFolder + "mentions.pickle", "wb") as mentionsPickle:
+		pickle.dump(mentions, mentionsPickle)	
 
 	with open(jsonFolder + "knowledgeBase.json") as kbJson:
 		knowledgeBase = json.load(kbJson)
@@ -419,9 +437,20 @@ if __name__ == "__main__":
 	#	entityToName = json.load(entityNameJson)
 	#print("Entity to name loaded ...")
 
+	with open(jsonFolder + "knowledgeBase.pickle", "wb") as kbPickle:
+		pickle.dump(knowledgeBase, kbPickle)
+
+
 	with open(jsonFolder + "embeddings.json") as embeddingsJson:
 		embs = json.load(embeddingsJson)
 	print("Embeddings loaded ...")
+
+
+	with open(jsonFolder + "embeddings.pickle", "wb") as embsPickle:
+		pickle.dump(embs, embsPickle)
+
+
+	pdb.set_trace()
 
 	knowledgeDataFrame = pandas.DataFrame(data=knowledgeBase)
 	knowledgeDataFrame["text"] = knowledgeDataFrame["text"].apply(lambda x: x.split(" "))
