@@ -563,9 +563,9 @@ class nelConfig(object):
   max_max_epoch = 13
   keep_prob = 1.0
   lr_decay = 0.5
-  batch_size = 20 
+  batch_size = 5 
   vocab_size = 10000
-  dimension = 50
+  dimension = 500
 
 
 
@@ -575,35 +575,14 @@ print("Getting data")
 #embeddings = tac_kbp.loadEmbeddings()
 #entityToEmbeddings, knowledgeDataFrame, mentionsDataFrame = tac_kbp.crossMapNel(knowledgeDataFrame, mentionsDataFrame, embeddings)
 #mentionsDataFrame = tac_kbp.generateGoldAndCorruptedEntities(mentionsDataFrame, entityToEmbeddings)
-jsonFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/LDC2015E19_TAC_KBP_English_Entity_Linking_Comprehensive_Training_and_Evaluation_Data_2009-2013/json/"
-mentionsDataFrame = pandas.read_pickle(jsonFolder + "mentionsMappings.pickle")
-def typeCheck(x):
-	return (type(x) is not int)
-
-def arrayToList(x):
-    return x.tolist()
-
-mentionsDataFrame["embs_check"] = mentionsDataFrame["embeddings"].apply(typeCheck)
-mentionsDataFrame["gold_check"] = mentionsDataFrame["gold_embeddings"].apply(typeCheck)
-mentionsDataFrame["corrupted_check"] = mentionsDataFrame["corrupted_embeddings"].apply(typeCheck)
-mentionsDataFrame = mentionsDataFrame[mentionsDataFrame["embs_check"] & mentionsDataFrame["gold_check"] & mentionsDataFrame["corrupted_check"]]
-mentionsDataFrame["mentions_embeddings"] = mentionsDataFrame["embeddings"].apply(arrayToList) 
-mentionsDataFrame["gold_embeddings"] = mentionsDataFrame["gold_embeddings"].apply(arrayToList)
-mentionsDataFrame["corrupted_embeddings"] = mentionsDataFrame["corrupted_embeddings"].apply(arrayToList)
+jsonFolder = "/home/khalife/ai-lab/data/LDC2015E19_TAC_KBP_English_Entity_Linking_Comprehensive_Training_and_Evaluation_Data_2009-2013/json/"
+mentionsDataFrame = pandas.read_pickle(jsonFolder + "mentionsWithEmbeddings.pickle")
 
 
 train_data = {}
-#train_data["mentions_embeddings"] = np.hstack(mentionsDataFrame["embeddings"].values).tolist()
-#train_data["gold_embeddings"] = np.hstack(mentionsDataFrame["gold_embeddings"].values).tolist()
-#train_data["corrupted_embeddings"] = np.hstack(mentionsDataFrame["corrupted_embeddings"].values).tolist()
-train_data["mentions_embeddings"] = mentionsDataFrame["mentions_embeddings"].values.tolist()
+train_data["mentions_embeddings"] = mentionsDataFrame["embeddings"].values.tolist()
 train_data["gold_embeddings"] = mentionsDataFrame["gold_embeddings"].values.tolist()
 train_data["corrupted_embeddings"] = mentionsDataFrame["corrupted_embeddings"].values.tolist()
-#train_data["mentions_embeddings"] = train_dataD["mentions_embeddings"].apply(arrayToList)
-#train_data["gold_embeddings"] = mentionsDataFrame["gold_entities_embeddings"].apply(arrayTolist) 
-#train_data["corrupted_embeddings"] = mentionsDataFrame["corrupted_embeddings"].apply(arrayToList)
-#valid_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
-#test_data = {"mentions_embeddings":[],"gold_entities_embeddings":[], "corrupted_entities_embeddings":[]}
 raw_data = train_data["mentions_embeddings"]
 nel_config = nelConfig()
 train_input = {}
@@ -625,17 +604,17 @@ class NELInput(object):
 
 # Train
 initializer = tf.random_uniform_initializer(-nel_config.init_scale, nel_config.init_scale)
-with tf.variable_scope("nel", initializer = initializer):
-  with tf.variable_scope("nel_mentions"):
-    mentions_embeddings = NELInput(config=nel_config, data=train_data["mentions_embeddings"], name="TestInput")
-    mention_model = BNRModel(is_training=True, config=nel_config, input_=mentions_embeddings) 
+with tf.variable_scope("nel") as scope:
+  mentions_embeddings = NELInput(config=nel_config, data=train_data["mentions_embeddings"], name="TestInput")
+  mention_model = BNRModel(is_training=True, config=nel_config, input_=mentions_embeddings) 
+  scope.reuse_variables()
+  gold_entities_embeddings = NELInput(config=nel_config, data=train_data["gold_embeddings"], name="TestInput")
+  gold_entity_model = BNRModel(is_training=False, config=nel_config, input_=gold_entities_embeddings)
+  corrupted_entities_embeddings = NELInput(config=nel_config, data=train_data["corrupted_embeddings"], name="TestInput")
+  corrupted_entity_model = BNRModel(is_training=False, config=nel_config, input_=corrupted_entities_embeddings)
+  pdb.set_trace()
 
-  with tf.variable_scope("nel_entities") as scope:
-    gold_entities_embeddings = NELInput(config=nel_config, data=train_data["gold_embeddings"], name="TestInput")
-    gold_entity_model = BNRModel(is_training=True, config=nel_config, input_=gold_entities_embeddings)
-    scope.reuse_variables()
-    corrupted_entities_embeddings = NELInput(config=nel_config, data=train_data["corrupted_embeddings"], name="TestInput")
-    corrupted_entity_model = BNRModel(is_training=False, config=nel_config, input_=corrupted_entities_embeddings)
+
 #
 #
 ## Valid
@@ -715,8 +694,7 @@ with tf.variable_scope("nel", initializer = initializer):
 
 ####################################################################################################
 ######################################  Entity linking    ##########################################
-
-with tf.variable_scope("nel"):      
+with tf.variable_scope("nel") as scope:
   # state = mention_model._initial_state
   batch_size = nel_config.batch_size 
   num_steps = nel_config.num_steps
@@ -732,12 +710,23 @@ with tf.variable_scope("nel"):
   normalize_corrupted_entity = tf.nn.l2_normalize(corrupted_output, 0)
   cosine_similarity = tf.reduce_sum(tf.multiply(normalize_mention,normalize_gold_entity))
   cosine_corrupted_similarities = tf.reduce_sum(tf.multiply(normalize_mention,normalize_corrupted_entity))
-  
+  pdb.set_trace() 
   distance = tf.maximum(0.0, 1 - cosine_similarity + cosine_corrupted_similarities)
   cost = tf.reduce_sum(distance)/(batch_size)
+  pdb.set_trace()
   nel_optimizer = tf.train.AdamOptimizer(learning_rate = 0.0001).minimize(cost)
+  #nel_optimizer = tf.train.GradientDescentOptimizer(learning_rate = 0.0001).minimize(cost)
 
-
+  pdb.set_trace() 
+  
+  tvars = tf.trainable_variables()
+  grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
+  optimizer = tf.train.GradientDescentOptimizer(mention_model._lr)
+  train_op = optimizer.apply_gradients(zip(grads, tvars),global_step=tf.contrib.framework.get_or_create_global_step())
+  
+  sv = tf.train.Supervisor(logdir=FLAGS.save_path)
+  with sv.managed_session() as session:
+    tvars[0].eval(session)
   #softmax_w = tf.get_variable(
   #    "softmax_w", [size, vocab_size], dtype=data_type())
   #softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
@@ -775,15 +764,22 @@ with sv.managed_session() as session:
   for step in range(mention_model.input.epoch_size):
     vals = session.run(fetches)
     cost = vals["cost"]
+    pdb.set_trace()
     mentionsState = vals["final_mentions_state"]
     goldState = vals["final_entities_state"]
     costs += cost
     iters += mention_model.input.num_steps
     print("For parameters")
-    if verbose and step % (mention_model.input.epoch_size // 10) == 10:
-      print("%.3f perplexity: %.3f speed: %.0f wps" %
-            (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
-             iters * mention_model.input.batch_size / (time.time() - start_time)))
+    #pdb.set_trace()
+    #if verbose and step % (mention_model.input.epoch_size // 10) == 10:
+    #  print("%.3f perplexity: %.3f speed: %.0f wps" %
+    #        (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
+    #         iters * mention_model.input.batch_size / (time.time() - start_time)))
+  
+    print("%.3f perplexity: %.3f speed: %.0f wps" % (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
+        iters * mention_model.input.batch_size / (time.time() - start_time)))
+  
+
 print(np.exp(costs / iters))
 
 
@@ -901,7 +897,6 @@ def main(_):
       costs += cost
       iters += mention_model.input.num_steps
       print("For parameters")
-      pdb.set_trace()
       if verbose and step % (mention_model.input.epoch_size // 10) == 10:
         print("%.3f perplexity: %.3f speed: %.0f wps" %
               (step * 1.0 / mention_model.input.epoch_size, np.exp(costs / iters),
