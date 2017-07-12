@@ -74,6 +74,21 @@ flags.DEFINE_bool("use_fp16", False,
 FLAGS = flags.FLAGS
 
 
+parser = argparse.ArgumentParser(description="Machine")
+parser.add_argument('-m', help='foo help')
+args = parser.parse_args()
+pdb.set_trace()
+if str(args.m) == "remote":
+        defaultDataFolder = "/home/khalife/ai-lab/data/"
+elif str(args.m) == "local":
+        defaultDataFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/"
+else:   
+        print("Which machine?")
+        sys.exit()      
+
+
+
+
 def data_type():
   return tf.float16 if FLAGS.use_fp16 else tf.float32
 

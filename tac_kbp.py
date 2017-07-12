@@ -1,3 +1,5 @@
+# coding: utf8
+import argparse
 import re
 import pdb
 import os
@@ -12,8 +14,18 @@ import random
 import pickle
 #Example 
 #doc = etree.parse('content-sample.xml')
-defaultDataFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/"
 
+parser = argparse.ArgumentParser(description="Machine")
+parser.add_argument('-m', help='foo help')
+args = parser.parse_args()
+pdb.set_trace()
+if str(args.m) == "remote":
+	defaultDataFolder = "/home/khalife/ai-lab/data/"
+elif str(args.m) == "local":
+	defaultDataFolder = "/Users/sammy/Documents/phd-2016/lab/ai-lab/data/"
+else:
+	print("Which machine?")
+	sys.exit()	
 
 
 years = ["2009", "2010"]
@@ -24,6 +36,11 @@ queriesFile = defaultDataFolder + challenge2015 + "/data/" + years[0] + "/eval/t
 sourceFile = defaultDataFolder + challenge2015 + "/data/" + years[0] + "/eval/source_documents/"
 
 
+def typeCheck(x):
+	return ( type(x) is not int )
+
+def arrayToList(x):
+	return x.tolist()
 
 def loadMentions(dataFolder=defaultDataFolder):
 	mentionToEntity = {}
@@ -58,20 +75,26 @@ def loadMentions(dataFolder=defaultDataFolder):
 	Mentions["entity"] = []
 	Mentions1 = Mentions
 	cuTime = 0
+	maxParagraph = 3
 	start = time.time()
 	i = 0
 	for m in mentionToText.keys():
 		print(sourceFile + mentionToText[m] + ".xml")
-		with open(sourceFile + mentionToText[m] + ".xml") as mentionFile:
+		with open(sourceFile + mentionToText[m].upper() + ".xml") as mentionFile:
 				try:
-					lxmlMentions = etree.iterparse(sourceFile + mentionToText[m] + ".xml", events=('end',), tag='HEADLINE')	
+					lxmlMentions = etree.iterparse(sourceFile + mentionToText[m].upper() + ".xml", events=('end',), tag='HEADLINE')	
 					mentionText = [lm for lm in lxmlMentions][0][1].text.lower().replace("\n", "")
+					lxmlMentions = etree.iterparse(sourceFile + mentionToText[m].upper() + ".xml", events=('end',), tag='P')				
+					mentionsText = [lm[1] for lm in lxmlMentions][:maxParagraph]
+					for mt in mentionsText:
+                                        	mentionText = mentionText + mt.text.lower().replace("\n", " ")
+				
 				except:
-					lxmlMentions = etree.iterparse(sourceFile + mentionToText[m] + ".xml", events=('end',), tag='TEXT')
-					mentionsText = [lm for lm in lxmlMentions]
+					lxmlMentions = etree.iterparse(sourceFile + mentionToText[m].upper() + ".xml", events=('end',), tag='P')
+					mentionsText = [lm[1] for lm in lxmlMentions][:maxParagraph]
 					mentionText = ""
 					for mt in mentionsText:
-						mentionText = mentionText + mt[1].text.lower().replace("\n", " ")
+						mentionText = mentionText + mt.text.lower().replace("\n", " ")
 				
 				mentionName = queriesName[m]
 				mentionEntity = mentionToEntity[m]
@@ -151,8 +174,8 @@ def loadKnowledgeBase():
 				knowledgeBase["name"].append(entityName)
 				#knowledgeBase["text"].append(kbes[1].find("wiki_text").text.lower().replace("\n", " "))
 				textContent = kbes[1].find("wiki_text").text.lower()
-				textContent = textContent.split("\n")
-				textContent = " ".join(textContent[:2])
+				textContent = textContent.split(". ")
+				textContent = " ".join(textContent[:4])
 				knowledgeBase["text"].append(textContent)
 				entityToName[entityId] = entityName 
 	
@@ -251,14 +274,15 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 					entity_words.append(word) # Word embedding, at last!
 				except:
 					pass
-			if ( len(entity_words) == 0 ):
-				#print("No embeddings for this entity")
+			if ( len(entity_words) == 0):
 				goldEmbeddings.append(-1)
 				corruptedEmbeddings.append(-1)
 			else:
 				nbWordsE.append(len(entity_words))
-				averageEmbeddings = np.mean(entity_words, 0)
-				goldEmbeddings.append(averageEmbeddings)
+				nbWords = np.min([nbWordsE, 10])
+				#averageEmbeddings = np.mean(entity_words, 0)
+				#goldEmbeddings.append(averageEmbeddings)
+				goldEmbeddings.append(entity_words[:nbWords])
 				not_found_corrupted_entity = True
 				count = 0
 				while ( ( count < 100 ) and not_found_corrupted_entity ): 
@@ -275,15 +299,18 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 						except:
 							pass
 
-					if ( len(corrupted_words) > 0 ):
-						not_found_corrupted_entity = True
+					if ( len(corrupted_words_embeddings ) > 0 ):
+						not_found_corrupted_entity = False 
 					count += 1
 	
 				if not_found_corrupted_entity == True:
 					nbWordsC.append(0)
+					corruptedEmbeddings.append(-1)
 				else:
 					nbWordsC.append(len(corrupted_words_embeddings))
-				corruptedEmbeddings.append(np.mean(corrupted_words_embeddings,0))
+					nbWords = np.min([len(corrupted_words_embeddings), 10])
+					corruptedEmbeddings.append(corrupted_words_embeddings[:nbWords])
+					#corruptedEmbeddings.append(np.mean(corrupted_words_embeddings,0))
 
 
 		W = len(mentionsDataFrame["words"][m])
@@ -300,7 +327,9 @@ def crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embeddings):
 			#print("No embeddings for this mention")
 			mentionsEmbeddings.append(-1)
 		else:
-			mentionsEmbeddings.append(np.mean(mention_words, 0))
+			nbWords = np.min([len(mention_words), 10])
+			mentionsEmbeddings.append(mention_words[:nbWords])
+			#mentionsEmbeddings.append(np.mean(mention_words, 0))
 	mentionsDataFrame["gold_embeddings"] = pandas.Series(goldEmbeddings).values
 	mentionsDataFrame["corrupted_embeddings"] = pandas.Series(corruptedEmbeddings).values
 	mentionsDataFrame["embeddings"] = pandas.Series(mentionsEmbeddings).values
@@ -346,8 +375,7 @@ def crossMapKB(knowledgeDataFrame, embeddings):
 if __name__ == "__main__":
 	print("Parsing tac-kbp")
 	#entityName, knowledgeDataFrame = loadKnowledgeBase()
-	pdb.set_trace()
-	#queriesName, mentionsDataFrame = loadMentions()
+	queriesName, mentionsDataFrame = loadMentions()
 	#embeddings = loadEmbeddings()
 	############## Complete mentions with embeddings ###########
 	#mentionsDataFrame["words"] = mentionsDataFrame["text"].apply(lambda x: x.split(" "))
@@ -419,51 +447,61 @@ if __name__ == "__main__":
 	#
 
 
-	######### Load from json files ###############@
-	jsonFolder = defaultDataFolder + challenge2015 + "/json/"
-	with open(jsonFolder + "mentions.json") as mentionsJson:
-		mentions = json.load(mentionsJson)
-	print("Mentions loaded ...")	
+	######### Load from pickle #########
 
-	#with open(jsonFolder + "queriesNames.json") as queriesJson:
-	#	queries = json.load(queriesJson)
-	with open(jsonFolder + "mentions.pickle", "wb") as mentionsPickle:
-		pickle.dump(mentions, mentionsPickle)	
+		
+	jsonFolder = defaultDataFolder + challenge2015 + "/json/"
+	####################################
+	with open(jsonFolder + "mentionsWithEmbeddings.pickle", "r") as mentionsEmbsFile: 
+		mentionsDataFrame = pickle.load(mentionsEmbsFile)
+
+	######### Load from json files ###############@
+	
+	#with open(jsonFolder + "mentions.json") as mentionsJson:
+	#	mentions = json.load(mentionsJson)
+	#print("Mentions loaded ...")	
+
 
 	with open(jsonFolder + "knowledgeBase.json") as kbJson:
 		knowledgeBase = json.load(kbJson)
 	print("Knowledge base loaded ...")
-	#with open(jsonFolder + "entityToName.json") as entityNameJson:
-	#	entityToName = json.load(entityNameJson)
-	#print("Entity to name loaded ...")
-
-	with open(jsonFolder + "knowledgeBase.pickle", "wb") as kbPickle:
-		pickle.dump(knowledgeBase, kbPickle)
-
+	
 
 	with open(jsonFolder + "embeddings.json") as embeddingsJson:
 		embs = json.load(embeddingsJson)
 	print("Embeddings loaded ...")
 
+	#
 
-	with open(jsonFolder + "embeddings.pickle", "wb") as embsPickle:
-		pickle.dump(embs, embsPickle)
-
-
-	pdb.set_trace()
 
 	knowledgeDataFrame = pandas.DataFrame(data=knowledgeBase)
 	knowledgeDataFrame["text"] = knowledgeDataFrame["text"].apply(lambda x: x.split(" "))
-	mentionsDataFrame = pandas.DataFrame(data=mentions)
+	#mentionsDataFrame = pandas.DataFrame(data=mentions)
+	#del mentions, knowledgeBase
 	print("Mapping mentions and embeddings ...")
-	mentionsDataFrame = crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embs)
-	#print("Mapping entities and embeddings ...")
-	#entityToEmbeddings = crossMapKB(knowledgeDataFrame, embs) 
-	#print("Generating corrupted entities ...")
+	#mentionsDataFrame = crossMapMentions(knowledgeDataFrame, mentionsDataFrame, embs)
+	#mentionsDataFrame["embs_check"] = mentionsDataFrame["embeddings"].apply(typeCheck)
+	#mentionsDataFrame["gold_check"] = mentionsDataFrame["gold_embeddings"].apply(typeCheck)
+	#mentionsDataFrame["corrupted_check"] = mentionsDataFrame["corrupted_embeddings"].apply(typeCheck)
+	#mentionsDataFrame = mentionsDataFrame[mentionsDataFrame["embs_check"] & mentionsDataFrame["gold_check"] & mentionsDataFrame["corrupted_check"] ]
+	#mentionsDataFrame["corrupted_embeddings"] = mentionsDataFrame["corrupted_embeddings"].apply(lambda x: sum(x, []))	
+	#mentionsDataFrame["gold_embeddings"] = mentionsDataFrame["gold_embeddings"].apply(lambda x: sum(x, []))
+	#mentionsDataFrame["embeddings"] = mentionsDataFrame["embeddings"].apply(lambda x: sum(x, []))
+	#with open(jsonFolder + "mentionsWithEmbeddings.pickle", "w") as mentionsEmbsFile: 
+	#	pickle.dump(mentionsDataFrame, mentionsEmbsFile)
+	#mentionAndContextLength = mentionsDataFrame["embeddings"].apply(len)
+	pdb.set_trace()
+	#mentionEmbeddingsShort = mentionsDataFrame[mentionAndContextLength < 500]
+	#500 - len(x)
+	#append(np.zeros()) 
+	def fillZeros(x):
+		L = len(x)
+		for i in range(500 - L):
+			x.append(0)
+	mentionsDataFrame["embeddings"].apply(fillZeros)
 	pdb.set_trace()	
 	#mentionsDataFrame = generateGoldAndCorruptedEntities(mentionsDataFrame, entityToEmbeddings)
 	
 
 	#
-	pdb.set_trace()
 	print("Done")
