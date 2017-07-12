@@ -47,7 +47,7 @@ $ python ptb_word_lm.py --data_path=simple-examples/data/
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import argparse
 import inspect
 import time
 import pdb
@@ -77,7 +77,6 @@ FLAGS = flags.FLAGS
 parser = argparse.ArgumentParser(description="Machine")
 parser.add_argument('-m', help='foo help')
 args = parser.parse_args()
-pdb.set_trace()
 if str(args.m) == "remote":
         defaultDataFolder = "/home/khalife/ai-lab/data/"
 elif str(args.m) == "local":
@@ -590,7 +589,7 @@ print("Getting data")
 #embeddings = tac_kbp.loadEmbeddings()
 #entityToEmbeddings, knowledgeDataFrame, mentionsDataFrame = tac_kbp.crossMapNel(knowledgeDataFrame, mentionsDataFrame, embeddings)
 #mentionsDataFrame = tac_kbp.generateGoldAndCorruptedEntities(mentionsDataFrame, entityToEmbeddings)
-jsonFolder = "/home/khalife/ai-lab/data/LDC2015E19_TAC_KBP_English_Entity_Linking_Comprehensive_Training_and_Evaluation_Data_2009-2013/json/"
+jsonFolder = defaultDataFolder + "/LDC2015E19_TAC_KBP_English_Entity_Linking_Comprehensive_Training_and_Evaluation_Data_2009-2013/json/"
 mentionsDataFrame = pandas.read_pickle(jsonFolder + "mentionsWithEmbeddings.pickle")
 
 
